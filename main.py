@@ -7,6 +7,10 @@ import asyncio
 app = FastAPI(title="Flight Tracker API")
 
 
+app.get("/")
+def read_root():
+    return {"message": "Flight Tracker API"}
+
 @app.get("/track-flight/{flight_number}")
 def track_flight(flight_number: str):
     """
