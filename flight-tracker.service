@@ -10,7 +10,8 @@ Environment=PATH=/home/ubuntu/flight-tracker/flight-tracker/venv/bin
 ExecStart=/home/ubuntu/flight-tracker/flight-tracker/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=10
-RestartPreventExitStatus=0
+TimeoutStopSec=30
+KillMode=mixed
 
 # Send notification on service failure
 ExecStartPost=/bin/bash -c 'if [ $? -ne 0 ]; then curl -X POST "YOUR_WEBHOOK_URL" -H "Content-Type: application/json" -d "{\"content\":\"🚨 Flight Tracker service crashed and restarted\"}"; fi'

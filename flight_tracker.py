@@ -5,6 +5,7 @@ from flight_api import get_flight_status
 from notifications import send_notifications
 import pytz
 import traceback
+import signal
 
 
 
@@ -19,6 +20,7 @@ class FlightTracker:
         self.update_interval = 10800
         self.last_digest = None
         self.nz_tz = pytz.timezone("Pacific/Auckland")
+        self._shutdown_event = asyncio.Event()
 
     async def start_tracking(self):
         """Start continuous flight tracking"""
@@ -45,13 +47,19 @@ class FlightTracker:
         await self._tracking_loop()
 
     async def _tracking_loop(self):
-        """Main tracking loop - runs every hour"""
-        while self.is_tracking:
+        """Main tracking loop with proper shutdown handling"""
+        while self.is_tracking and not self._shutdown_event.is_set():
             try:
-                # Wait for 3 hour (10800 seconds)
-                await asyncio.sleep(self.update_interval)
+                # Wait for update interval or shutdown signal
+                try:
+                    await asyncio.wait_for(
+                        asyncio.sleep(self.update_interval), 
+                        timeout=self.update_interval
+                    )
+                except asyncio.TimeoutError:
+                    pass  # Normal timeout, continue
 
-                if not self.is_tracking:
+                if not self.is_tracking or self._shutdown_event.is_set():
                     break
 
                 # Get current flight status
@@ -88,7 +96,6 @@ class FlightTracker:
             except Exception as e:
                 self.error_count += 1
                 error_msg = f"❌ Error tracking {self.flight_number}: {str(e)}"
-                # Send Error
                 send_notifications(error_msg)
                 print(f"ERROR: {error_msg}")
                 print(f"Traceback: {traceback.format_exc()}")
@@ -99,21 +106,33 @@ class FlightTracker:
                     print(f"ISSUE: {crash_msg}")
                     self.stop_tracking()
                     break
-            await asyncio.sleep(300)
+                
+                # Shorter wait on error
+                try:
+                    await asyncio.wait_for(asyncio.sleep(300), timeout=300)
+                except asyncio.TimeoutError:
+                    pass
 
     def _is_flight_landed(self, message: str) -> bool:
         """Check if flight has landed based on status message"""
         landed_statuses = [
             "ARRIVED",
             "LANDED",
-            "GATE ARRIVAL",
+            "GATE ARRIVAL", 
             "ARRIVED / GATE ARRIVAL",
+            "ARRIVED AT GATE",
+            "ON GROUND",
+            "COMPLETED"
         ]
-        return any(status in message.upper() for status in landed_statuses)
+        status_found = any(status in message.upper() for status in landed_statuses)
+        print(f"DEBUG: Status check - Message: {message}")
+        print(f"DEBUG: Landing detected: {status_found}")
+        return status_found
 
     def stop_tracking(self):
         """Stop the tracking service"""
         self.is_tracking = False
+        self._shutdown_event.set()
         if self.start_time:
             duration = datetime.now(self.nz_tz) - self.start_time
             print(f"Stopped tracking {self.flight_number} after {duration}")

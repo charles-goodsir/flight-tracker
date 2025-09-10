@@ -43,11 +43,37 @@ def get_flight_status(flight_number: str) -> str:
         # Get the first flight (most recent)
         flight = flights[0]
 
+        # Add this after line 25 to see the raw data:
+        print("DEBUG: Raw flight data:")
+        print(f"Status: {flight.get('status')}")
+        print(f"Progress: {flight.get('progress_percent')}")
+        print(f"Cancelled: {flight.get('cancelled')}")
+        print(f"Diverted: {flight.get('diverted')}")
+
         # Extract flight information
         airline = flight.get("operator", "Unknown")
         departure_airport = flight.get("origin", {}).get("code_iata", "Unknown")
         arrival_airport = flight.get("destination", {}).get("code_iata", "Unknown")
-        status = flight.get("status", "Unknown")
+
+        # Get multiple status fields for better detection
+        main_status = flight.get("status", "Unknown")
+        progress = flight.get("progress_percent", 0)
+        cancelled = flight.get("cancelled", False)
+        diverted = flight.get("diverted", False)
+
+        # Determine the most relevant status
+        if cancelled:
+            status = "CANCELLED"
+        elif diverted:
+            status = "DIVERTED"
+        elif progress == 100:
+            status = "ARRIVED"
+        elif main_status in ["Arrived / Gate Arrival", "Arrived"]:
+            status = "ARRIVED"
+        elif main_status == "Scheduled":
+            status = "SCHEDULED"
+        else:
+            status = main_status.upper()
 
         # Get departure and arrival times
         departure_time = flight.get("scheduled_out")
